@@ -1,0 +1,105 @@
+#include <SPI.h>
+#include <Ethernet.h>
+#include <dht.h> //library sensor humidity
+
+//masukan MAC adreess dan IP address
+byte mac[] = {
+  0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED
+};
+IPAddress ip(192, 168, 1, 177);
+
+// port default untuk HTTP adalah 80
+EthernetServer server(80);
+
+//inisialisasi pin sensor
+#define DHT22_PIN A5
+dht DHT;
+
+//variable sensor
+int rhsense, RealHum;
+float TempDhtF, TempDhtC;
+
+//variable sampling
+int jml = 0;
+int sampling = 100;
+
+void setup() {
+  // buka komunikasi serial dibautrate 9600
+  Serial.begin(9600);
+  while (!Serial) {
+    ; 
+  }
+
+
+  // memulai koneksi 
+  Ethernet.begin(mac, ip);
+  server.begin(); //start server
+  DHT.read22(DHT22_PIN);
+}
+
+
+void loop() {
+  controlTemp(); //hitung temperature dan humidity
+  // memuali komunikasi dari client
+  EthernetClient client = server.available();
+  if (client) {
+    Serial.println("new client");
+    boolean currentLineIsBlank = true;
+    while (client.connected()) {
+      if (client.available()) {
+        char c = client.read();
+        Serial.write(c);
+
+        if (c == '\n' && currentLineIsBlank) {
+
+          client.println("HTTP/1.1 200 OK");
+          client.println("Content-Type: text/html");
+          client.println("Connection: close");  
+          client.println("Refresh: 5");  
+          client.println();
+          client.println("<!DOCTYPE HTML>");
+          client.println("<html>");
+
+            client.print("Temperature = ");
+            client.print(TempDhtF);
+            client.print(" || ");
+            client.print("Humidity = ");
+            client.print(RealHum);
+            client.println("<br />");
+          
+          client.println("</html>");
+          break;
+        }
+        if (c == '\n') {
+
+          currentLineIsBlank = true;
+        }
+        else if (c != '\r') {
+
+          currentLineIsBlank = false;
+        }
+      }
+    }
+
+    delay(1);
+
+    client.stop();
+    Serial.println("client disconnected");
+  }
+
+}
+
+
+void controlTemp()
+{
+    DHT.read22(DHT22_PIN);
+    TempDhtC = DHT.temperature;
+    RealHum = DHT.humidity;
+
+
+    TempDhtF = ((TempDhtC * 9 / 5) + 32);
+    
+    Serial.print("Temperature = ");Serial.print(TempDhtF);Serial.print(" F");Serial.print(" || ");
+    Serial.print("Humidity = ");Serial.print(RealHum);Serial.print(" %");Serial.println();
+    delay(1000);
+}
